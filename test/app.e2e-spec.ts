@@ -52,6 +52,7 @@ describe('StoryTime API (e2e)', () => {
       JWT_SECRET: 'test-secret',
       PUBLIC_URL: '',
       LIBRETRANSLATE_URL: '',
+      REVIEWER_CODE: 'REVIEW-CODE-42',
     });
     complete = await makeAkuko([
       { text: 'Once upon a time', image: true },
@@ -1218,5 +1219,17 @@ describe('StoryTime API (e2e)', () => {
   it('serves the terms and privacy pages', async () => {
     await http().get('/terms').expect(200).expect('Content-Type', /html/);
     await http().get('/privacy').expect(200).expect('Content-Type', /html/);
+  });
+
+  it("lets Play's reviewers in with the reviewer code, however it's typed", async () => {
+    await http()
+      .post('/api/reviewer-access')
+      .send({ code: ' review-code-42 ' })
+      .expect(204);
+    await http()
+      .post('/api/reviewer-access')
+      .send({ code: 'REVIEW-CODE-41' })
+      .expect(403);
+    await http().post('/api/reviewer-access').send({}).expect(400);
   });
 });

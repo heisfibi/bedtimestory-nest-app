@@ -25,6 +25,9 @@ export const appConfig = registerAs('app', () => ({
   libreTranslateUrl:
     process.env.LIBRETRANSLATE_URL?.replace(/\/+$/, '') || undefined,
   libreTranslateApiKey: process.env.LIBRETRANSLATE_API_KEY || undefined,
+  // Opens every book in the app for Google Play's reviewers (see
+  // ReviewerController). Unset means no code works.
+  reviewerCode: process.env.REVIEWER_CODE?.trim() || undefined,
 }));
 
 export type AppConfig = ReturnType<typeof appConfig>;

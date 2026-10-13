@@ -8,6 +8,7 @@ import { BooksModule } from './books/books.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { MusicModule } from './music/music.module.js';
 import { PagesController } from './pages/pages.controller.js';
+import { ReviewerController } from './reviewer/reviewer.controller.js';
 
 @Module({
   imports: [
@@ -38,6 +39,6 @@ import { PagesController } from './pages/pages.controller.js';
     BackgroundsModule,
     MusicModule,
   ],
-  controllers: [PagesController],
+  controllers: [PagesController, ReviewerController],
 })
 export class AppModule {}
