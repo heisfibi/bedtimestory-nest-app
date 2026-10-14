@@ -5,10 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import type { Admin } from '../auth/admin.entity.js';
+import { isSuperAdmin, type Admin } from '../auth/admin.entity.js';
 import { Book } from '../books/book.entity.js';
 import {
-  CREATOR_SHARE,
+  DEFAULT_CREATOR_SHARE,
+  SettingsService,
+} from '../settings/settings.service.js';
+import {
   monthFigures,
   ownView,
   type BookInfo,
@@ -22,6 +25,9 @@ import { RevenueMonth, StatementBook } from './revenue-month.entity.js';
 const DAY_MS = 24 * 60 * 60 * 1000;
 // A tablet that was offline sends its reading when it's back: this long after, at most.
 const OLDEST_SESSION_MS = 62 * DAY_MS;
+
+// 0.6 → 0.4, not 0.40000000000000002.
+const round = (share: number) => Math.round(share * 10_000) / 10_000;
 
 /** The month a moment falls in, by the calendar in UTC: "2026-10". */
 export const monthOf = (date: Date) => date.toISOString().slice(0, 7);
@@ -44,6 +50,7 @@ export class AnalyticsService {
     @InjectRepository(StatementBook)
     private readonly statementBooks: Repository<StatementBook>,
     @InjectRepository(Book) private readonly books: Repository<Book>,
+    private readonly settings: SettingsService,
   ) {}
 
   // --- From the app ---
@@ -173,30 +180,51 @@ export class AnalyticsService {
   }
 
   /**
-   * A month's figures. Super admins see every book; anyone else their own
-   * books only, and nothing of the rest (not the month's money either).
+   * A month's figures. Super admins see every book; anyone else (admins
+   * too) their own books only, and nothing of the rest (not the month's
+   * money either).
    */
   async report(month: string, admin: Admin): Promise<MonthReport> {
     const all = await this.fullReport(month);
-    return admin.role === 'super_admin' ? all : ownView(all, admin.id);
+    return isSuperAdmin(admin) ? all : ownView(all, admin.id);
+  }
+
+  /**
+   * Super admins only. The creator's part of what a book makes, 0 to 1. It
+   * applies to every month that isn't closed; a closed month keeps the
+   * share it was closed with.
+   */
+  setCreatorShare(share: number, admin: Admin) {
+    return this.settings.setCreatorShare(share, admin.name);
+  }
+
+  creatorShare() {
+    return this.settings.creatorShareSetting();
   }
 
   private async fullReport(month: string): Promise<MonthReport> {
     const entered = await this.revenue.findOneBy({ month });
+    const closed = entered?.closedAt && entered.statement;
+    // A closed month keeps the share it was closed with (60% before it could be changed).
+    const creatorShare = closed
+      ? (entered.statement!.split?.creator ?? DEFAULT_CREATOR_SHARE)
+      : await this.settings.creatorShare();
     const head = {
       month,
       scope: 'all' as const,
-      split: { creator: CREATOR_SHARE, platform: 1 - CREATOR_SHARE },
+      split: { creator: creatorShare, platform: round(1 - creatorShare) },
       currency: entered?.currency ?? null,
       revenue: entered?.amount ?? null,
       closed_at: entered?.closedAt?.toISOString() ?? null,
     };
     // A closed month is what it was when it was closed.
-    if (entered?.closedAt && entered.statement) {
+    if (closed) {
       const lines = await this.statementBooks.findBy({ month });
+      const { totals, creators } = entered.statement!;
       return {
         ...head,
-        ...entered.statement,
+        totals,
+        creators,
         books: lines
           .map((row) => row.line)
           .sort((a, b) => b.share - a.share || b.reads - a.reads),
@@ -226,6 +254,7 @@ export class AnalyticsService {
         books,
         entered?.amount ?? null,
         subscribersSeen,
+        creatorShare,
       ),
     };
   }
@@ -262,14 +291,14 @@ export class AnalyticsService {
     if (month >= monthOf(new Date())) {
       throw new BadRequestException("A month can be closed once it's over");
     }
-    const { books, totals, creators } = await this.fullReport(month);
+    const { books, totals, creators, split } = await this.fullReport(month);
     await this.statementBooks.delete({ month });
     await this.statementBooks.save(
       books.map((line) =>
         this.statementBooks.create({ month, bookId: line.id, line }),
       ),
     );
-    row.statement = { totals, creators };
+    row.statement = { totals, creators, split };
     row.closedAt = new Date();
     await this.revenue.save(row);
   }

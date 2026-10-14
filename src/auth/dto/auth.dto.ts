@@ -1,5 +1,8 @@
 import { Transform } from 'class-transformer';
 import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -10,6 +13,12 @@ import {
   MinLength,
 } from 'class-validator';
 import { ADMIN_ROLES, type AdminRole } from '../admin.entity.js';
+import {
+  APPLICATION_STATUSES,
+  CREATOR_KINDS,
+  type ApplicationStatus,
+  type CreatorKind,
+} from '../creator-application.entity.js';
 
 const normalizeEmail = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
@@ -81,4 +90,72 @@ export class UpdateAdminDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+}
+
+const trimOrNull = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() || null : value;
+
+/** From the website's "Become a creator" page. */
+export class ApplyDto extends NewPasswordDto {
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty({ message: 'Tell us your name' })
+  @MaxLength(100)
+  name: string;
+
+  @Transform(normalizeEmail)
+  @IsEmail({}, { message: 'Enter a valid email address' })
+  @MaxLength(255)
+  email: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(30, {
+    message: 'Tell us a little more about yourself (at least 30 characters)',
+  })
+  @MaxLength(3000)
+  about: string;
+
+  @IsOptional()
+  @Transform(trimOrNull)
+  @IsString()
+  @MaxLength(1000)
+  links?: string | null;
+
+  @IsArray()
+  @ArrayNotEmpty({ message: 'Choose what you would like to make' })
+  @ArrayUnique()
+  @IsIn(CREATOR_KINDS, { each: true })
+  kinds: CreatorKind[];
+
+  @IsOptional()
+  @Transform(trimOrNull)
+  @IsString()
+  @MaxLength(200)
+  languages?: string | null;
+
+  @IsOptional()
+  @Transform(trimOrNull)
+  @IsString()
+  @MaxLength(80)
+  country?: string | null;
+
+  // Left empty by people; bots fill in every field.
+  @IsOptional()
+  @IsString()
+  website?: string;
+}
+
+export class ListApplicationsDto {
+  @IsOptional()
+  @IsIn(APPLICATION_STATUSES)
+  status?: ApplicationStatus;
+}
+
+export class DeclineApplicationDto {
+  @IsOptional()
+  @Transform(trimOrNull)
+  @IsString()
+  @MaxLength(2000)
+  note?: string | null;
 }

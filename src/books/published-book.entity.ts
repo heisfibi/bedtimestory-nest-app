@@ -7,6 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Admin } from '../auth/admin.entity.js';
 import { Category } from '../catalog/category.entity.js';
 import type { BookMood, BookType, TitleTranslation } from './book.entity.js';
 
@@ -44,6 +45,16 @@ export class PublishedBook {
   })
   @JoinColumn({ name: 'category_id' })
   category: Category | null;
+
+  // The studio account the book belongs to: who readers follow to hear of
+  // its next book. Copied from the book's owner on publishing.
+  @ManyToOne(() => Admin, {
+    eager: true,
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'creator_id' })
+  creator: Admin | null;
 
   @Column({ length: 255 })
   file: string;

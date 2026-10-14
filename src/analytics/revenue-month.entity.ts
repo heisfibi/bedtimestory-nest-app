@@ -1,5 +1,10 @@
 import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
-import type { BookLine, CreatorLine, MonthTotals } from './allocation.js';
+import type {
+  BookLine,
+  CreatorLine,
+  MonthReport,
+  MonthTotals,
+} from './allocation.js';
 
 // The subscription money of a month, as a super admin enters it from what the
 // store paid out, and the month's statement once it's closed.
@@ -27,10 +32,15 @@ export class RevenueMonth {
   @Column({ name: 'closed_at', type: 'datetime', nullable: true })
   closedAt: Date | null;
 
-  // The month's totals and each creator's, as they stood when it was closed.
-  // Each book's are in StatementBook.
+  // The month's totals and each creator's, and the creator share, as they
+  // stood when it was closed. Each book's are in StatementBook. Months closed
+  // before the share could be changed have no split: theirs was 60%.
   @Column({ type: 'simple-json', nullable: true })
-  statement: { totals: MonthTotals; creators: CreatorLine[] } | null;
+  statement: {
+    totals: MonthTotals;
+    creators: CreatorLine[];
+    split?: MonthReport['split'];
+  } | null;
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;

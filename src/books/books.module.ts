@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { appConfig, type AppConfig } from '../app.config.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { CatalogModule } from '../catalog/catalog.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { AdminBooksController } from './admin-books.controller.js';
 import { AdminNarratorsController } from './admin-narrators.controller.js';
 import { AdminTranslateController } from './admin-translate.controller.js';
@@ -21,6 +22,7 @@ import { TranslationService } from './translation.service.js';
     TypeOrmModule.forFeature([Book, PublishedBook, Narrator]),
     CatalogModule,
     AuthModule,
+    NotificationsModule,
   ],
   controllers: [
     BooksController,

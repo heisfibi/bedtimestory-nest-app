@@ -7,7 +7,9 @@ import {
   ParseIntPipe,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
+import { AppIntegrityGuard } from '../app-integrity/app-integrity.guard.js';
 import type { Request } from 'express';
 import { appConfig, type AppConfig } from '../app.config.js';
 import { baseUrl } from '../common/base-url.js';
@@ -29,6 +31,7 @@ export class BooksController {
 
   // Same envelope as DRF's PageNumberPagination: { count, next, previous, results }.
   @Get('books')
+  @UseGuards(AppIntegrityGuard)
   async list(@Query() query: ListBooksQueryDto, @Req() request: Request) {
     const { page, category, type, level, spooky, action } = query;
     const pageSize = Math.min(query.page_size, MAX_PAGE_SIZE);
@@ -59,7 +62,8 @@ export class BooksController {
   }
 
   // The website's list. Spooky and action books only with ?spooky=1 and
-  // ?action=1, as in /api/books.
+  // ?action=1, as in /api/books. It's open to anyone, so it leaves out the
+  // book files themselves (`url`): those are for the app (AppIntegrityGuard).
   @Get('books-all')
   async listAll(
     @Query('spooky') spooky: string | undefined,
@@ -71,12 +75,18 @@ export class BooksController {
       action: queryFlag({ value: action }),
     });
     const freeId = await this.published.freeBookId();
-    return books.map((book) =>
-      serializePublishedBook(book, this.origin(request), freeId),
-    );
+    return books.map((book) => {
+      const { url: _file, ...rest } = serializePublishedBook(
+        book,
+        this.origin(request),
+        freeId,
+      );
+      return rest;
+    });
   }
 
   @Get('books/:id')
+  @UseGuards(AppIntegrityGuard)
   async findOne(
     @Param('id', ParseIntPipe) id: number,
     @Req() request: Request,

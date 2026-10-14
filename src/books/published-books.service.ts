@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import {
@@ -24,13 +28,22 @@ const hiddenMoods = (allowed: AllowedMoods) => {
 
 /** The live catalogue the mobile app reads, and the copying that feeds it. */
 @Injectable()
-export class PublishedBooksService {
+export class PublishedBooksService implements OnApplicationBootstrap {
   constructor(
     @InjectRepository(PublishedBook)
     private readonly published: Repository<PublishedBook>,
     private readonly media: MediaFiles,
     private readonly translation: TranslationService,
   ) {}
+
+  /** Books that went live before a live copy kept its creator get their owner as one. */
+  async onApplicationBootstrap() {
+    await this.published.query(
+      `UPDATE published_books SET creator_id =
+         (SELECT owner_id FROM books WHERE books.id = published_books.id)
+       WHERE creator_id IS NULL`,
+    );
+  }
 
   async paginate(
     page: number,
@@ -138,6 +151,7 @@ export class PublishedBooksService {
           level: book.level,
           mood: book.mood,
           category: book.category,
+          creator: book.owner,
           file,
           thumbnail,
           cover,

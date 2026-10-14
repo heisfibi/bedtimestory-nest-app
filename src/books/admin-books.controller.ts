@@ -27,11 +27,7 @@ import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/m
 import type { Request, Response } from 'express';
 import { appConfig, type AppConfig } from '../app.config.js';
 import type { Admin } from '../auth/admin.entity.js';
-import {
-  AdminAuthGuard,
-  CurrentAdmin,
-  SuperAdminOnly,
-} from '../auth/auth.guard.js';
+import { AdminAuthGuard, CurrentAdmin, StaffOnly } from '../auth/auth.guard.js';
 import { baseUrl } from '../common/base-url.js';
 import type { Book } from './book.entity.js';
 import { serializeBook } from './book.serializer.js';
@@ -190,7 +186,7 @@ export class AdminBooksController {
 
   @Post(':id/approve')
   @HttpCode(200)
-  @SuperAdminOnly()
+  @StaffOnly()
   async approve(
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() admin: Admin,
@@ -201,7 +197,7 @@ export class AdminBooksController {
 
   @Post(':id/reject')
   @HttpCode(200)
-  @SuperAdminOnly()
+  @StaffOnly()
   async reject(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RejectBookDto,
@@ -213,7 +209,7 @@ export class AdminBooksController {
 
   @Post(':id/unpublish')
   @HttpCode(200)
-  @SuperAdminOnly()
+  @StaffOnly()
   async unpublish(
     @Param('id', ParseIntPipe) id: number,
     @CurrentAdmin() admin: Admin,

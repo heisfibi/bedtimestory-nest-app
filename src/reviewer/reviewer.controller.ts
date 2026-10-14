@@ -8,6 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { AppIntegrityGuard } from '../app-integrity/app-integrity.guard.js';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { IsString, MaxLength } from 'class-validator';
 import { appConfig, type AppConfig } from '../app.config.js';
@@ -26,6 +27,7 @@ const digest = (code: string) =>
 // subscriptions screen takes a code (REVIEWER_CODE) that opens them all; what
 // they read isn't counted as a subscriber's. Unset, no code works.
 @Controller('api/reviewer-access')
+@UseGuards(AppIntegrityGuard)
 export class ReviewerController {
   constructor(@Inject(appConfig.KEY) private readonly config: AppConfig) {}
 

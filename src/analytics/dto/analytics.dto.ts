@@ -94,6 +94,15 @@ export class SessionsDto {
   sessions: SessionDto[];
 }
 
+export class CreatorShareDto {
+  /** The creator's part of what a book makes, in whole percent. */
+  @Type(() => Number)
+  @IsInt({ message: 'Give the share as a whole percent' })
+  @Min(0)
+  @Max(100)
+  percent: number;
+}
+
 export class MonthQueryDto {
   @IsOptional()
   @Matches(MONTH, { message: 'month must look like 2026-10' })

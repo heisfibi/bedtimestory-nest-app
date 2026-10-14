@@ -1,10 +1,12 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { AppIntegrityGuard } from '../app-integrity/app-integrity.guard.js';
 import { AnalyticsService } from './analytics.service.js';
 import { HelloDto, SessionsDto } from './dto/analytics.dto.js';
 
 // What the mobile app reports. There's no sign-in in the app: a reader is an
 // install's made-up id (see Reader).
 @Controller('api/analytics')
+@UseGuards(AppIntegrityGuard)
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsService) {}
 

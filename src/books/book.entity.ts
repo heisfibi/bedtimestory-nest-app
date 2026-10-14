@@ -41,13 +41,16 @@ export const BOOK_MOODS = ['calm', 'funny', 'spooky', 'action'] as const;
 export type BookMood = (typeof BOOK_MOODS)[number];
 
 /** Moods the public lists leave out unless the app asks for them. */
-export const PARENT_GATED_MOODS = ['spooky', 'action'] as const satisfies readonly BookMood[];
+export const PARENT_GATED_MOODS = [
+  'spooky',
+  'action',
+] as const satisfies readonly BookMood[];
 export type ParentGatedMood = (typeof PARENT_GATED_MOODS)[number];
 
 /**
  * draft     → being written; editable by its owner
- * in_review → submitted; waiting for a super admin (owner can withdraw it)
- * approved  → a super admin published this version (see PublishedBook)
+ * in_review → submitted; waiting for an admin or super admin (owner can withdraw it)
+ * approved  → an admin or super admin published this version (see PublishedBook)
  * rejected  → sent back with a review note
  * Editing an approved or rejected book makes it a draft again. An approved
  * book's published copy stays live until a newer version is approved.

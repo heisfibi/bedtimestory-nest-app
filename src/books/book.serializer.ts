@@ -26,6 +26,8 @@ export function serializePublishedBook(
     level: book.level,
     mood: book.mood,
     category: book.category?.name ?? null,
+    // Who readers follow for news of the next book (the studio account).
+    creator: book.creator && { id: book.creator.id, name: book.creator.name },
     free: book.id === freeId,
     slide_count: book.slideCount,
     url: mediaUrl(baseUrl, book.file)!,

@@ -16,6 +16,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { AppIntegrityGuard } from '../app-integrity/app-integrity.guard.js';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { appConfig, type AppConfig } from '../app.config.js';
@@ -30,6 +31,7 @@ import { MusicService } from './music.service.js';
 
 /** For the app: the soundtracks it should download in place of its own. */
 @Controller('api/music')
+@UseGuards(AppIntegrityGuard)
 export class MusicController {
   constructor(
     private readonly music: MusicService,

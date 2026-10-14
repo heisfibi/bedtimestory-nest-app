@@ -1,14 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppIntegrityModule } from './app-integrity/app-integrity.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
 import { appConfig, type AppConfig } from './app.config.js';
 import { BackgroundsModule } from './backgrounds/backgrounds.module.js';
 import { BooksModule } from './books/books.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { MusicModule } from './music/music.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { PagesController } from './pages/pages.controller.js';
 import { ReviewerController } from './reviewer/reviewer.controller.js';
+import { UnlockCodesModule } from './unlock-codes/unlock-codes.module.js';
 
 @Module({
   imports: [
@@ -38,6 +41,9 @@ import { ReviewerController } from './reviewer/reviewer.controller.js';
     AnalyticsModule,
     BackgroundsModule,
     MusicModule,
+    NotificationsModule,
+    AppIntegrityModule,
+    UnlockCodesModule,
   ],
   controllers: [PagesController, ReviewerController],
 })

@@ -93,7 +93,11 @@ describe('TranslationService', () => {
     const translation = service({ libreTranslateUrl: 'http://translate.test' });
     expect(translation.available).toBe(true);
     expect(
-      await translation.translateTexts(['The owl', ' ', 'The moon'], 'en', 'fr'),
+      await translation.translateTexts(
+        ['The owl', ' ', 'The moon'],
+        'en',
+        'fr',
+      ),
     ).toEqual(['fr:The owl', '', 'fr:The moon']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

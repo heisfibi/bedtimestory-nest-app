@@ -3,12 +3,14 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import type { Admin } from '../auth/admin.entity.js';
+import { isStaff, isSuperAdmin, type Admin } from '../auth/admin.entity.js';
 import { CatalogService } from '../catalog/catalog.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { assertStudioFile, inspectAkuko, type AkukoSummary } from './akuko.js';
 import { Book, type BookStatus } from './book.entity.js';
 import { CreateBookDto, UpdateBookDto } from './dto/book-fields.dto.js';
@@ -16,11 +18,10 @@ import { MediaFiles } from './media-files.js';
 import { NarratorsService } from './narrators.service.js';
 import { PublishedBooksService } from './published-books.service.js';
 
-const isSuperAdmin = (admin: Admin) => admin.role === 'super_admin';
-
 /**
- * Books as admins work on them, and the review workflow. Admins see and edit
- * their own books; super admins see all of them and decide what goes live.
+ * Books as the studio works on them, and the review workflow. Creators see
+ * and edit their own books; admins and super admins see all of them and
+ * decide what goes live.
  */
 @Injectable()
 export class BooksService {
@@ -30,13 +31,16 @@ export class BooksService {
     private readonly catalog: CatalogService,
     private readonly live: PublishedBooksService,
     private readonly narrators: NarratorsService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  private readonly logger = new Logger(BooksService.name);
 
   findAll(admin: Admin, status?: BookStatus) {
     return this.books.find({
       where: {
         ...(status ? { status } : {}),
-        ...(isSuperAdmin(admin) ? {} : { owner: { id: admin.id } }),
+        ...(isStaff(admin) ? {} : { owner: { id: admin.id } }),
       },
       order: { updatedAt: 'DESC', id: 'DESC' },
     });
@@ -45,7 +49,7 @@ export class BooksService {
   /** A book the admin may see. Others' books look like they don't exist. */
   async findOne(id: number, admin: Admin) {
     const book = await this.books.findOneBy({ id });
-    if (!book || (!isSuperAdmin(admin) && book.owner?.id !== admin.id)) {
+    if (!book || (!isStaff(admin) && book.owner?.id !== admin.id)) {
       throw new NotFoundException(`Book ${id} not found`);
     }
     return book;
@@ -85,7 +89,7 @@ export class BooksService {
     studio?: Express.Multer.File,
   ) {
     const book = await this.findOne(id, admin);
-    if (book.status === 'in_review' && !isSuperAdmin(admin)) {
+    if (book.status === 'in_review' && !isStaff(admin)) {
       throw new ConflictException(
         'This book is waiting for review. Withdraw it to make changes.',
       );
@@ -121,6 +125,11 @@ export class BooksService {
 
   async remove(id: number, admin: Admin) {
     const book = await this.findOne(id, admin);
+    if (book.owner?.id !== admin.id && !isSuperAdmin(admin)) {
+      throw new ForbiddenException(
+        "Only a super admin can delete someone else's book.",
+      );
+    }
     const isLive = !!(await this.live.findOptional(id));
     if (isLive && !isSuperAdmin(admin)) {
       throw new ForbiddenException(
@@ -163,22 +172,31 @@ export class BooksService {
     return this.books.save(book);
   }
 
-  /** Super admins only. Publishes this version, replacing any live one. */
+  /** Admins and super admins only. Publishes this version, replacing any live one. */
   async approve(id: number, reviewer: Admin) {
     const book = await this.findOne(id, reviewer);
     if (book.status === 'approved') {
       throw new ConflictException('This version is already approved');
     }
     const { titles } = await this.assertComplete(book, 'publish');
-    await this.live.publish(book, titles);
+    const wasLive = !!(await this.live.findOptional(id));
+    const published = await this.live.publish(book, titles);
     book.status = 'approved';
     book.reviewNote = null;
     book.reviewedBy = reviewer;
     book.reviewedAt = new Date();
-    return this.books.save(book);
+    const saved = await this.books.save(book);
+    // Readers hear of a new book, not of a new version of one they have.
+    if (!wasLive) {
+      const free = (await this.live.freeBookId()) === id;
+      this.notifications.bookWentLive(published, free).catch((error) => {
+        this.logger.error(`Queueing news of book ${id} failed: ${error}`);
+      });
+    }
+    return saved;
   }
 
-  /** Super admins only. */
+  /** Admins and super admins only. */
   async reject(id: number, reviewer: Admin, note: string) {
     const book = await this.findOne(id, reviewer);
     if (book.status !== 'in_review') {
@@ -191,7 +209,7 @@ export class BooksService {
     return this.books.save(book);
   }
 
-  /** Super admins only. Takes the live copy out of the app. */
+  /** Admins and super admins only. Takes the live copy out of the app. */
   async unpublish(id: number, admin: Admin) {
     const book = await this.findOne(id, admin);
     if (!(await this.live.unpublish(id))) {

@@ -12,14 +12,19 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Request } from 'express';
 import { Repository } from 'typeorm';
-import { Admin } from './admin.entity.js';
+import { Admin, type AdminRole } from './admin.entity.js';
 
 type AuthedRequest = Request & { admin?: Admin };
 
-const SUPER_ADMIN_ONLY = 'superAdminOnly';
+const ROLES = 'roles';
 
 /** Restricts a route (or controller) to super admins. Needs AdminAuthGuard. */
-export const SuperAdminOnly = () => SetMetadata(SUPER_ADMIN_ONLY, true);
+export const SuperAdminOnly = () =>
+  SetMetadata(ROLES, ['super_admin'] satisfies AdminRole[]);
+
+/** Restricts a route (or controller) to super admins and admins (moderators). Needs AdminAuthGuard. */
+export const StaffOnly = () =>
+  SetMetadata(ROLES, ['super_admin', 'admin'] satisfies AdminRole[]);
 
 /** The signed-in admin, set by AdminAuthGuard. */
 export const CurrentAdmin = createParamDecorator(
@@ -62,12 +67,16 @@ export class AdminAuthGuard implements CanActivate {
       );
     }
 
-    const superAdminOnly = this.reflector.getAllAndOverride<boolean>(
-      SUPER_ADMIN_ONLY,
+    const roles = this.reflector.getAllAndOverride<AdminRole[] | undefined>(
+      ROLES,
       [context.getHandler(), context.getClass()],
     );
-    if (superAdminOnly && admin.role !== 'super_admin') {
-      throw new ForbiddenException('Only super admins can do this');
+    if (roles && !roles.includes(admin.role)) {
+      throw new ForbiddenException(
+        roles.includes('admin')
+          ? 'Only admins and super admins can do this'
+          : 'Only super admins can do this',
+      );
     }
 
     request.admin = admin;

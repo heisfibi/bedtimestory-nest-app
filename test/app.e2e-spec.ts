@@ -181,8 +181,9 @@ describe('StoryTime API (e2e)', () => {
     const created = await http()
       .post('/api/admin/admins')
       .set(bearer(superToken))
-      .send({ name: 'Bola', email: 'bola@example.com', role: 'admin' })
+      .send({ name: 'Bola', email: 'bola@example.com', role: 'creator' })
       .expect(201);
+    expect(created.body.admin.role).toBe('creator');
     adminId = created.body.admin.id;
     adminToken = await login(
       'bola@example.com',
@@ -192,7 +193,7 @@ describe('StoryTime API (e2e)', () => {
     await http()
       .post('/api/admin/admins')
       .set(bearer(superToken))
-      .send({ name: 'Bola again', email: 'bola@example.com', role: 'admin' })
+      .send({ name: 'Bola again', email: 'bola@example.com', role: 'creator' })
       .expect(409);
     await http().get('/api/admin/admins').set(bearer(adminToken)).expect(403);
 
@@ -261,7 +262,7 @@ describe('StoryTime API (e2e)', () => {
     expect(res.body.message).toMatch(/index\.json/);
   });
 
-  it('only shows admins their own books', async () => {
+  it('only shows creators their own books', async () => {
     const { body: book } = await createBook(superToken, {
       title: "Ada's draft",
     }).expect(201);
@@ -712,6 +713,183 @@ describe('StoryTime API (e2e)', () => {
     await http().get(path(book.url)).expect(404);
   });
 
+  it('lets admins moderate books, but not run the team, the app or the money', async () => {
+    const created = await http()
+      .post('/api/admin/admins')
+      .set(bearer(superToken))
+      .send({ name: 'Cleo', email: 'cleo@example.com', role: 'admin' })
+      .expect(201);
+    const moderator = await login(
+      'cleo@example.com',
+      created.body.temporary_password,
+    );
+
+    const { body: book } = await createBook(adminToken, {
+      title: 'The Patient Tortoise',
+      category: 'Fables',
+    }).expect(201);
+    // A creator's draft is there for moderators to see, not to delete.
+    const all = await http()
+      .get('/api/admin/books')
+      .set(bearer(moderator))
+      .expect(200);
+    expect(all.body.map((b: { id: number }) => b.id)).toContain(book.id);
+    await http()
+      .delete(`/api/admin/books/${book.id}`)
+      .set(bearer(moderator))
+      .expect(403);
+
+    await action(adminToken, book.id, 'submit').expect(200);
+    await action(adminToken, book.id, 'approve').expect(403);
+    const approved = await action(moderator, book.id, 'approve').expect(200);
+    expect(approved.body).toMatchObject({
+      status: 'approved',
+      reviewed_by: { name: 'Cleo' },
+    });
+    await action(moderator, book.id, 'unpublish').expect(200);
+
+    for (const path of [
+      '/api/admin/admins',
+      '/api/admin/backgrounds',
+      '/api/admin/music',
+    ]) {
+      await http().get(path).set(bearer(moderator)).expect(403);
+    }
+    await http()
+      .put('/api/admin/analytics/creator-share')
+      .set(bearer(moderator))
+      .send({ percent: 90 })
+      .expect(403);
+    // Admins can't make themselves super admins either.
+    await http()
+      .patch(`/api/admin/admins/${created.body.admin.id}`)
+      .set(bearer(moderator))
+      .send({ role: 'super_admin' })
+      .expect(403);
+
+    await http()
+      .delete(`/api/admin/books/${book.id}`)
+      .set(bearer(adminToken))
+      .expect(204);
+    await http()
+      .patch(`/api/admin/admins/${created.body.admin.id}`)
+      .set(bearer(superToken))
+      .send({ active: false })
+      .expect(200);
+  });
+
+  it('lets people apply to become creators, and admins decide', async () => {
+    const terms = await http()
+      .get('/api/creator-applications/terms')
+      .expect(200);
+    expect(terms.body).toEqual({ creator_share: 0.6 });
+
+    const application = {
+      name: 'Dayo',
+      email: 'Dayo@Example.com',
+      password: 'dayo-password-1',
+      about: 'I write bedtime poems for my nieces, mostly about the sea.',
+      links: 'https://example.com/dayo',
+      kinds: ['poem', 'story'],
+      languages: 'English, Yoruba',
+      country: 'Nigeria',
+    };
+    const apply = (body: object) =>
+      http().post('/api/creator-applications').send(body);
+    await apply({ ...application, about: 'Hi' }).expect(400);
+    await apply({ ...application, kinds: [] }).expect(400);
+    await apply({ ...application, kinds: ['novel'] }).expect(400);
+    await apply({ ...application, password: 'short' }).expect(400);
+    // Someone with an account signs in instead.
+    await apply({ ...application, email: 'bola@example.com' }).expect(409);
+
+    expect((await apply(application).expect(201)).body).toEqual({
+      status: 'pending',
+    });
+    await apply(application).expect(409);
+
+    // Until it's approved, signing in says so; a wrong password says only that.
+    const pending = await http()
+      .post('/api/auth/login')
+      .send({ email: 'dayo@example.com', password: 'dayo-password-1' })
+      .expect(403);
+    expect(pending.body.message).toMatch(/still being reviewed/);
+    await http()
+      .post('/api/auth/login')
+      .send({ email: 'dayo@example.com', password: 'wrong-password' })
+      .expect(401);
+
+    // A bot that fills in the hidden field is thanked, and nothing is kept.
+    await apply({
+      ...application,
+      email: 'bot@example.com',
+      website: 'http://spam.example',
+    }).expect(201);
+
+    const list = (token: string, status = 'pending') =>
+      http()
+        .get(`/api/admin/creator-applications?status=${status}`)
+        .set(bearer(token));
+    await list(adminToken).expect(403);
+    await http().get('/api/admin/creator-applications').expect(401);
+    const { body: waiting } = await list(superToken).expect(200);
+    expect(waiting).toEqual([
+      expect.objectContaining({
+        name: 'Dayo',
+        email: 'dayo@example.com',
+        kinds: ['poem', 'story'],
+        languages: 'English, Yoruba',
+        country: 'Nigeria',
+        status: 'pending',
+      }),
+    ]);
+    expect(JSON.stringify(waiting)).not.toMatch(/scrypt|password/);
+
+    const decide = (id: number, what: string, body?: object) =>
+      http()
+        .post(`/api/admin/creator-applications/${id}/${what}`)
+        .set(bearer(superToken))
+        .send(body);
+    const { body: approved } = await decide(waiting[0].id, 'approve').expect(
+      200,
+    );
+    expect(approved).toMatchObject({
+      status: 'approved',
+      reviewed_by: { name: 'Ada' },
+    });
+    await decide(waiting[0].id, 'decline').expect(409);
+
+    // They sign in with the password they chose, as a creator.
+    const dayo = await login('dayo@example.com', 'dayo-password-1');
+    const me = await http().get('/api/auth/me').set(bearer(dayo)).expect(200);
+    expect(me.body).toMatchObject({ id: approved.account_id, role: 'creator' });
+    await apply(application).expect(409);
+
+    // A declined applicant hears why when they try to sign in, and may apply again.
+    const eme = { ...application, name: 'Eme', email: 'eme@example.com' };
+    await apply(eme).expect(201);
+    const [waitingEme] = (await list(superToken).expect(200)).body;
+    await decide(waitingEme.id, 'decline', {
+      note: 'We need a sample of your writing.',
+    }).expect(200);
+    const declined = await http()
+      .post('/api/auth/login')
+      .send({ email: 'eme@example.com', password: 'dayo-password-1' })
+      .expect(403);
+    expect(declined.body.message).toMatch(/wasn't accepted/);
+    expect(declined.body.message).toMatch(/sample of your writing/);
+    expect((await list(superToken, 'declined').expect(200)).body).toHaveLength(
+      1,
+    );
+    await apply(eme).expect(201);
+
+    await http()
+      .patch(`/api/admin/admins/${approved.account_id}`)
+      .set(bearer(superToken))
+      .send({ active: false })
+      .expect(200);
+  });
+
   it('paginates published books like DRF', async () => {
     for (let i = 1; i <= 11; i++) {
       const { body } = await createBook(superToken, {
@@ -1095,6 +1273,41 @@ describe('StoryTime API (e2e)', () => {
     expect(line(reopened, house)).toMatchObject({ amount: 500 });
     await close(superToken, month, 'reopen').expect(409);
 
+    // The creator share is the super admin's to set. It applies to every
+    // month that isn't closed, and a closed month keeps the one it had.
+    const share = (token: string, percent: unknown) =>
+      http()
+        .put('/api/admin/analytics/creator-share')
+        .set(bearer(token))
+        .send({ percent });
+    await share(adminToken, 70).expect(403);
+    await share(superToken, 101).expect(400);
+    await share(superToken, 62.5).expect(400);
+    expect((await share(superToken, 70).expect(200)).body).toMatchObject({
+      creator_share: 0.7,
+      updated_by: 'Ada',
+    });
+    const at70 = await report(superToken);
+    expect(at70.split).toEqual({ creator: 0.7, platform: 0.3 });
+    expect(line(at70, creators)).toMatchObject({
+      amount: 500,
+      creator_amount: 350,
+      platform_amount: 150,
+    });
+    expect((await report(adminToken)).totals.creator_amount).toBe(350);
+    expect(
+      (await http().get('/api/creator-applications/terms').expect(200)).body,
+    ).toEqual({ creator_share: 0.7 });
+
+    await close(superToken, month).expect(200);
+    await share(superToken, 60).expect(200);
+    const kept = await report(superToken);
+    expect(kept.split).toEqual({ creator: 0.7, platform: 0.3 });
+    expect(line(kept, creators)).toMatchObject({ creator_amount: 350 });
+    const { body: open } = await close(superToken, month, 'reopen').expect(200);
+    expect(open.split).toEqual({ creator: 0.6, platform: 0.4 });
+    expect(line(open, creators)).toMatchObject({ creator_amount: 300 });
+
     // This month's, when none is named: nothing read yet.
     expect((await report(superToken, '')).books).toEqual([]);
   });
@@ -1231,5 +1444,56 @@ describe('StoryTime API (e2e)', () => {
       .send({ code: 'REVIEW-CODE-41' })
       .expect(403);
     await http().post('/api/reviewer-access').send({}).expect(400);
+  });
+
+  it('gives every creator a code that opens their own books in the app', async () => {
+    await http().get('/api/admin/unlock-code').expect(401);
+    const { body: mine } = await http()
+      .get('/api/admin/unlock-code')
+      .set(bearer(adminToken))
+      .expect(200);
+    expect(mine.code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(mine.live_books).toEqual(expect.any(Number));
+    // The same code every time it's looked at.
+    expect(
+      (
+        await http()
+          .get('/api/admin/unlock-code')
+          .set(bearer(adminToken))
+          .expect(200)
+      ).body.code,
+    ).toBe(mine.code);
+
+    const redeem = (code: string) =>
+      http().post('/api/unlock-codes').send({ code });
+    // Typed any old way on a tablet.
+    const typed = ` ${mine.code.replace('-', ' ').toLowerCase()} `;
+    expect((await redeem(typed).expect(200)).body).toEqual({
+      all: false,
+      creator: { id: adminId, name: 'Bola' },
+    });
+    expect((await redeem('review-code-42').expect(200)).body).toEqual({
+      all: true,
+      creator: null,
+    });
+    await redeem('ABCD-EFGH').expect(403);
+    await http().post('/api/unlock-codes').send({}).expect(400);
+
+    // A new code closes the books to the old one.
+    const { body: renewed } = await http()
+      .post('/api/admin/unlock-code/renew')
+      .set(bearer(adminToken))
+      .expect(200);
+    expect(renewed.code).not.toBe(mine.code);
+    await redeem(mine.code).expect(403);
+    await redeem(renewed.code).expect(200);
+
+    // So does deactivating the account.
+    await http()
+      .patch(`/api/admin/admins/${adminId}`)
+      .set(bearer(superToken))
+      .send({ active: false })
+      .expect(200);
+    await redeem(renewed.code).expect(403);
   });
 });

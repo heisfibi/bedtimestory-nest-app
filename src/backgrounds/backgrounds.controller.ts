@@ -12,6 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { AppIntegrityGuard } from '../app-integrity/app-integrity.guard.js';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { appConfig, type AppConfig } from '../app.config.js';
@@ -21,6 +22,7 @@ import { BackgroundsService } from './backgrounds.service.js';
 
 /** For the app: the backgrounds it should download in place of its own. */
 @Controller('api/backgrounds')
+@UseGuards(AppIntegrityGuard)
 export class BackgroundsController {
   constructor(
     private readonly backgrounds: BackgroundsService,

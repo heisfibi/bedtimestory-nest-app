@@ -28,6 +28,26 @@ export const appConfig = registerAs('app', () => ({
   // Opens every book in the app for Google Play's reviewers (see
   // ReviewerController). Unset means no code works.
   reviewerCode: process.env.REVIEWER_CODE?.trim() || undefined,
+  // Optional. Only needed once "Enhanced security for push notifications" is
+  // turned on for the project at expo.dev.
+  expoAccessToken: process.env.EXPO_ACCESS_TOKEN?.trim() || undefined,
+  // Google Play Integrity (see src/app-integrity): whether the app's endpoints
+  // only answer our own app, installed from Google Play.
+  appIntegrity: {
+    required: isOn(process.env.APP_INTEGRITY_REQUIRED),
+    androidPackage:
+      process.env.ANDROID_PACKAGE?.trim() || 'com.fibigames.bedtimestories',
+    // The Google Cloud service account's JSON key, or the path to it.
+    serviceAccount:
+      process.env.PLAY_INTEGRITY_SERVICE_ACCOUNT?.trim() || undefined,
+    // The linked Cloud project's number: the app needs it to ask Play.
+    cloudProjectNumber:
+      process.env.PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER?.trim() || undefined,
+  },
 }));
+
+function isOn(value: string | undefined) {
+  return ['1', 'true', 'yes', 'on'].includes(value?.trim().toLowerCase() ?? '');
+}
 
 export type AppConfig = ReturnType<typeof appConfig>;

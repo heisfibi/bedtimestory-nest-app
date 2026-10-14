@@ -31,6 +31,9 @@ const sitting = (
   subscribed,
 });
 
+// The creator's part, as the super admin set it.
+const SHARE = 0.6;
+
 const line = (figures: Pick<MonthReport, 'books'>, id: number) =>
   figures.books.find((book) => book.id === id)!;
 
@@ -48,6 +51,7 @@ describe('monthFigures', () => {
       books,
       1000,
       2,
+      SHARE,
     );
 
     expect(figures.totals).toMatchObject({
@@ -101,6 +105,7 @@ describe('monthFigures', () => {
       books,
       500,
       2,
+      SHARE,
     );
     expect(line(figures, 10)).toMatchObject({
       reads: 100,
@@ -126,6 +131,7 @@ describe('monthFigures', () => {
       books,
       300,
       1,
+      SHARE,
     );
     expect(figures.totals).toMatchObject({
       subscribers_reading: 1,
@@ -156,6 +162,7 @@ describe('monthFigures', () => {
       books,
       null,
       5,
+      SHARE,
     );
     expect(figures.totals).toMatchObject({
       subscribers_seen: 5,
@@ -178,6 +185,7 @@ describe('monthFigures', () => {
       books,
       100,
       3,
+      SHARE,
     );
     const amounts = figures.books.map((book) => book.amount ?? 0);
     expect(amounts.sort((a, b) => a - b)).toEqual([33.33, 33.33, 33.34]);
@@ -196,6 +204,7 @@ describe('monthFigures', () => {
       books,
       900,
       0,
+      SHARE,
     );
     expect(figures.totals).toMatchObject({
       subscribers_reading: 0,
@@ -205,8 +214,27 @@ describe('monthFigures', () => {
     expect(line(figures, 10).amount).toBe(0);
   });
 
+  it('gives creators the share the super admin set', () => {
+    const figures = monthFigures(
+      [sitting('a', 10, 10), sitting('b', 20, 10)],
+      books,
+      1000,
+      2,
+      0.75,
+    );
+    expect(line(figures, 10)).toMatchObject({
+      amount: 500,
+      creator_amount: 375,
+      platform_amount: 125,
+    });
+    expect(figures.totals).toMatchObject({
+      creator_amount: 750,
+      platform_amount: 250,
+    });
+  });
+
   it('keeps the reading of a book that has since been deleted', () => {
-    const figures = monthFigures([sitting('a', 99, 10)], books, 50, 1);
+    const figures = monthFigures([sitting('a', 99, 10)], books, 50, 1, SHARE);
     expect(line(figures, 99)).toMatchObject({
       title: 'Deleted book 99',
       creator: null,
@@ -241,6 +269,7 @@ describe('ownView', () => {
         books,
         1000,
         2,
+        SHARE,
       ),
     };
     const own = ownView(report, ada.id);

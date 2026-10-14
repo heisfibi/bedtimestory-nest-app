@@ -4,14 +4,22 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { Request } from 'express';
 import { appConfig, type AppConfig } from '../app.config.js';
+import { SettingsModule } from '../settings/settings.module.js';
 import { Admin } from './admin.entity.js';
+import {
+  AdminApplicationsController,
+  ApplicationsController,
+} from './applications.controller.js';
+import { ApplicationsService } from './applications.service.js';
 import { AdminsController, AuthController } from './auth.controller.js';
 import { AdminAuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
+import { CreatorApplication } from './creator-application.entity.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Admin]),
+    TypeOrmModule.forFeature([Admin, CreatorApplication]),
+    SettingsModule,
     JwtModule.registerAsync({
       inject: [appConfig.KEY],
       useFactory: ({ jwtSecret, sessionTtl }: AppConfig) => {
@@ -42,8 +50,13 @@ import { AuthService } from './auth.service.js';
       },
     ]),
   ],
-  controllers: [AuthController, AdminsController],
-  providers: [AuthService, AdminAuthGuard],
+  controllers: [
+    AuthController,
+    AdminsController,
+    ApplicationsController,
+    AdminApplicationsController,
+  ],
+  providers: [AuthService, ApplicationsService, AdminAuthGuard],
   exports: [AdminAuthGuard, JwtModule, TypeOrmModule],
 })
 export class AuthModule {}

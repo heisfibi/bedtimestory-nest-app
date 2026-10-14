@@ -4,12 +4,15 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { SettingsService } from '../settings/settings.service.js';
 import { Admin } from './admin.entity.js';
+import { ApplicationsService } from './applications.service.js';
 import { CreateAdminDto, SetupDto, UpdateAdminDto } from './dto/auth.dto.js';
 import {
   hashPassword,
@@ -19,11 +22,22 @@ import {
 } from './passwords.js';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(Admin) private readonly admins: Repository<Admin>,
     private readonly jwt: JwtService,
+    private readonly applications: ApplicationsService,
+    private readonly settings: SettingsService,
   ) {}
+
+  async onModuleInit() {
+    // Until 2026-10-13 there were two roles, and "admin" wrote books and
+    // submitted them: what a creator does now. Admins have since become
+    // moderators, so the accounts made before then become creators.
+    await this.settings.once('roles-with-creators', async () => {
+      await this.admins.update({ role: 'admin' }, { role: 'creator' });
+    });
+  }
 
   // --- Sessions ---
 
@@ -32,6 +46,11 @@ export class AuthService {
     const valid = admin
       ? await verifyPassword(password, admin.passwordHash)
       : await verifyAgainstDummy(password);
+    if (!admin) {
+      // Someone who applied to be a creator and isn't one (yet).
+      const refusal = await this.applications.signInRefusal(email, password);
+      if (refusal) throw new ForbiddenException(refusal);
+    }
     if (!admin || !valid)
       throw new UnauthorizedException('Wrong email or password');
     if (!admin.active) {

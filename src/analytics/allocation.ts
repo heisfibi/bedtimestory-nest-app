@@ -5,16 +5,14 @@
 // month's money. That part is shared among the books the subscriber read, in
 // proportion to how much of each was read: a book read right through counts 1,
 // half of it 0.5, and reading it again counts again. What a book gets from
-// all of its readers is the money it made; CREATOR_SHARE of that is its
-// creator's and the rest the platform's.
+// all of its readers is the money it made; the creator share of that (set by
+// a super admin, see SettingsService) is its creator's and the rest the
+// platform's.
 //
 // Shared this way, a book earns by being read by many subscribers, not by
 // being read many times by one: nobody can direct more than their own
 // subscription. Reading by people without a subscription (the free book) is
 // counted, and earns nothing.
-
-/** The creator's part of what a book makes; the platform keeps the rest. */
-export const CREATOR_SHARE = 0.6;
 
 /** One sitting with a book (see ReadingSession). */
 export interface SessionRow {
@@ -141,7 +139,8 @@ export function apportion(total: number, shares: number[]): number[] {
 
 /**
  * A month's figures: every book's readers and reading, and, when `revenue`
- * (the month's subscription money) is known, what each book made.
+ * (the month's subscription money) is known, what each book made and its
+ * creator's part of that, `creatorShare` (0 to 1).
  * `subscribersSeen` is how many subscribers used the app at all.
  */
 export function monthFigures(
@@ -149,6 +148,7 @@ export function monthFigures(
   books: Map<number, BookInfo>,
   revenue: number | null,
   subscribersSeen: number,
+  creatorShare: number,
 ): Pick<MonthReport, 'totals' | 'books' | 'creators'> {
   const tallies = new Map<
     number,
@@ -228,7 +228,7 @@ export function monthFigures(
     const tally = tallies.get(id)!;
     const info = books.get(id);
     const made = hundredths ? hundredths[i] : null;
-    const creators = made === null ? null : Math.round(made * CREATOR_SHARE);
+    const creators = made === null ? null : Math.round(made * creatorShare);
     return {
       id,
       title: info?.title ?? `Deleted book ${id}`,
