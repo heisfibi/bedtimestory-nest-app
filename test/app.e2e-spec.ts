@@ -1429,6 +1429,61 @@ describe('StoryTime API (e2e)', () => {
     ).toEqual(['Moonlight', 'Stars']);
   });
 
+  it('tells the app the versions a super admin set, without the app check', async () => {
+    const versions = () => http().get('/api/app-version').expect(200);
+    expect((await versions()).body).toEqual({
+      min_version: null,
+      latest_version: null,
+    });
+
+    const set = (token: string, body: object) =>
+      http().put('/api/admin/app-version').set(bearer(token)).send(body);
+    await set(adminToken, { min_version: '1.2.0' }).expect(403);
+    await http()
+      .get('/api/admin/app-version')
+      .set(bearer(adminToken))
+      .expect(403);
+    await set(superToken, { min_version: 'v1.2' }).expect(400);
+    await set(superToken, {
+      min_version: '1.4',
+      latest_version: '1.3.9',
+    }).expect(400);
+
+    expect(
+      (
+        await set(superToken, {
+          min_version: ' 1.2.0 ',
+          latest_version: '1.4.1',
+        }).expect(200)
+      ).body,
+    ).toMatchObject({
+      min_version: '1.2.0',
+      latest_version: '1.4.1',
+      updated_by: 'Ada',
+    });
+    expect((await versions()).body).toEqual({
+      min_version: '1.2.0',
+      latest_version: '1.4.1',
+    });
+
+    // A blank box clears a version.
+    await set(superToken, { min_version: '', latest_version: '1.4.1' }).expect(
+      200,
+    );
+    expect((await versions()).body).toEqual({
+      min_version: null,
+      latest_version: '1.4.1',
+    });
+    expect(
+      (
+        await http()
+          .get('/api/admin/app-version')
+          .set(bearer(superToken))
+          .expect(200)
+      ).body,
+    ).toMatchObject({ min_version: null, latest_version: '1.4.1' });
+  });
+
   it('serves the terms and privacy pages', async () => {
     await http().get('/terms').expect(200).expect('Content-Type', /html/);
     await http().get('/privacy').expect(200).expect('Content-Type', /html/);

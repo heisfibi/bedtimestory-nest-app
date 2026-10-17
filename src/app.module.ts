@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppIntegrityModule } from './app-integrity/app-integrity.module.js';
+import { AppVersionModule } from './app-version/app-version.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
 import { appConfig, type AppConfig } from './app.config.js';
 import { BackgroundsModule } from './backgrounds/backgrounds.module.js';
@@ -43,6 +44,7 @@ import { UnlockCodesModule } from './unlock-codes/unlock-codes.module.js';
     MusicModule,
     NotificationsModule,
     AppIntegrityModule,
+    AppVersionModule,
     UnlockCodesModule,
   ],
   controllers: [PagesController, ReviewerController],

@@ -7,6 +7,17 @@ import { Setting } from './setting.entity.js';
 export const DEFAULT_CREATOR_SHARE = 0.6;
 
 const CREATOR_SHARE = 'creator_share';
+const APP_VERSIONS = 'app_versions';
+
+/**
+ * The app versions the backend tells the app about ("1.4.0"). Below
+ * `min` the app can't be used until it's updated; below `latest` it
+ * suggests an update. Null means no such version is set.
+ */
+export interface AppVersions {
+  min: string | null;
+  latest: string | null;
+}
 
 @Injectable()
 export class SettingsService {
@@ -36,6 +47,29 @@ export class SettingsService {
       this.settings.create({ key: CREATOR_SHARE, value: share, updatedBy: by }),
     );
     return this.creatorShareSetting();
+  }
+
+  /** The app versions, and who changed them last and when (null while never set). */
+  async appVersionsSetting() {
+    const row = await this.settings.findOneBy({ key: APP_VERSIONS });
+    const value = (row?.value ?? {}) as Partial<AppVersions>;
+    return {
+      versions: { min: value.min ?? null, latest: value.latest ?? null },
+      updatedBy: row?.updatedBy ?? null,
+      updatedAt: row?.updatedAt ?? null,
+    };
+  }
+
+  /** Super admins only. */
+  async setAppVersions(versions: AppVersions, by: string) {
+    await this.settings.save(
+      this.settings.create({
+        key: APP_VERSIONS,
+        value: versions,
+        updatedBy: by,
+      }),
+    );
+    return this.appVersionsSetting();
   }
 
   /**

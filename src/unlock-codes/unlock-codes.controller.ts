@@ -21,7 +21,7 @@ export class RedeemCodeDto {
 }
 
 /**
- * For the app's "Have a code?" box. Answers what the code opens: every book
+ * For the app's code box ("Restore purchases" held). Answers what the code opens: every book
  * (`all`), or one creator's. The app asks again about the codes it keeps, so
  * a renewed code or a deactivated account closes the books again.
  */
