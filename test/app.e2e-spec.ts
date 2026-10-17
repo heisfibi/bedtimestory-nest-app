@@ -1429,59 +1429,78 @@ describe('StoryTime API (e2e)', () => {
     ).toEqual(['Moonlight', 'Stars']);
   });
 
-  it('tells the app the versions a super admin set, without the app check', async () => {
-    const versions = () => http().get('/api/app-version').expect(200);
-    expect((await versions()).body).toEqual({
-      min_version: null,
-      latest_version: null,
-    });
+  it('tells the app what each store serves, as a super admin set it, without the app check', async () => {
+    const manifest = async () =>
+      (await http().get('/api/app-release/manifest.json').expect(200)).body;
+    expect(await manifest()).toEqual({});
 
-    const set = (token: string, body: object) =>
-      http().put('/api/admin/app-version').set(bearer(token)).send(body);
-    await set(adminToken, { min_version: '1.2.0' }).expect(403);
+    const PLAY =
+      'https://play.google.com/store/apps/details?id=com.fibigames.bedtimestories';
+    const release = {
+      version: '1.1.0',
+      build: 3,
+      storeUrl: PLAY,
+      notes: ['New comics every week', ' Faster   downloads '],
+    };
+    const save = (token: string, platform: string, body: object) =>
+      http()
+        .put(`/api/admin/app-release/${platform}`)
+        .set(bearer(token))
+        .send(body);
+
+    await save(adminToken, 'android', release).expect(403);
     await http()
-      .get('/api/admin/app-version')
+      .get('/api/admin/app-release')
       .set(bearer(adminToken))
       .expect(403);
-    await set(superToken, { min_version: 'v1.2' }).expect(400);
-    await set(superToken, {
-      min_version: '1.4',
-      latest_version: '1.3.9',
+    await save(superToken, 'windows', release).expect(400);
+    await save(superToken, 'android', { ...release, version: 'v1.1' }).expect(
+      400,
+    );
+    await save(superToken, 'android', {
+      ...release,
+      storeUrl: 'https://play.google.com.example.com/store/apps/details?id=x',
+    }).expect(400);
+    await save(superToken, 'android', { ...release, minimumBuild: 4 }).expect(
+      400,
+    );
+    await save(superToken, 'android', {
+      ...release,
+      notes: ['a', 'b', 'c', 'd', 'e'],
     }).expect(400);
 
-    expect(
-      (
-        await set(superToken, {
-          min_version: ' 1.2.0 ',
-          latest_version: '1.4.1',
-        }).expect(200)
-      ).body,
-    ).toMatchObject({
-      min_version: '1.2.0',
-      latest_version: '1.4.1',
-      updated_by: 'Ada',
+    // Saved, it's in the manifest at once (this instance forgets its cached copy).
+    const { body: view } = await save(superToken, 'android', {
+      ...release,
+      minimumBuild: 2,
+      minimumVersion: '',
+    }).expect(200);
+    expect(view.manifest_url).toMatch(/\/api\/app-release\/manifest\.json$/);
+    expect(view.platforms).toEqual([
+      expect.objectContaining({ platform: 'android', updated_by: 'Ada' }),
+      { platform: 'ios', release: null, updated_by: null, updated_at: null },
+    ]);
+    const live = await manifest();
+    expect(live.android).toEqual({
+      version: '1.1.0',
+      build: 3,
+      minimumBuild: 2,
+      storeUrl: PLAY,
+      notes: ['New comics every week', 'Faster downloads'],
     });
-    expect((await versions()).body).toEqual({
-      min_version: '1.2.0',
-      latest_version: '1.4.1',
-    });
+    expect(live.ios).toBeUndefined();
+    expect(Date.parse(live.builtAt)).not.toBeNaN();
 
-    // A blank box clears a version.
-    await set(superToken, { min_version: '', latest_version: '1.4.1' }).expect(
-      200,
-    );
-    expect((await versions()).body).toEqual({
-      min_version: null,
-      latest_version: '1.4.1',
-    });
-    expect(
-      (
-        await http()
-          .get('/api/admin/app-version')
-          .set(bearer(superToken))
-          .expect(200)
-      ).body,
-    ).toMatchObject({ min_version: null, latest_version: '1.4.1' });
+    // Removing it stops readers on that store being asked.
+    await http()
+      .delete('/api/admin/app-release/android')
+      .set(bearer(superToken))
+      .expect(200);
+    expect(await manifest()).toEqual({});
+    await http()
+      .delete('/api/admin/app-release/android')
+      .set(bearer(superToken))
+      .expect(404);
   });
 
   it('serves the terms and privacy pages', async () => {
