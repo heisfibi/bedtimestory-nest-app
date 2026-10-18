@@ -349,6 +349,20 @@ describe('StoryTime API (e2e)', () => {
     await http().get(path(live.results[0].thumbnail)).expect(200);
   });
 
+  it('links over https when the proxy in front of it took https', async () => {
+    // Railway ends https at its proxy, which says so in X-Forwarded-Proto.
+    const proxied = await http()
+      .get('/api/books/?page=1&category=')
+      .set('X-Forwarded-Proto', 'https')
+      .expect(200);
+    const [book] = proxied.body.results;
+    expect(book.url).toMatch(/^https:\/\//);
+    expect(book.thumbnail).toMatch(/^https:\/\//);
+
+    // Called directly, the links are as the request came.
+    expect((await publicBooks()).results[0].url).toMatch(/^http:\/\//);
+  });
+
   it('needs a narrator name on every recorded voice-over', async () => {
     // `ofBubble`: recorded the way a comic is, a bubble at a time.
     const narratedBy = async (narrator: string, ofBubble = false) => {
