@@ -49,6 +49,7 @@ export class ApplicationsService {
         kinds: dto.kinds,
         languages: dto.languages ?? null,
         country: dto.country ?? null,
+        creatorTermsVersion: dto.creator_terms_version,
         status: 'pending',
       }),
     );

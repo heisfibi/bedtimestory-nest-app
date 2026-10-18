@@ -57,6 +57,11 @@ export class CreatorApplication {
   @Column({ type: 'varchar', length: 80, nullable: true })
   country: string | null;
 
+  // Which version of the Creator Terms they agreed to when they applied
+  // (legal_versions; 0 is the built-in text). Null from before there were any.
+  @Column({ name: 'creator_terms_version', type: 'int', nullable: true })
+  creatorTermsVersion: number | null;
+
   @Column({ type: 'varchar', length: 20, default: 'pending' })
   status: ApplicationStatus;
 
@@ -89,6 +94,7 @@ export function serializeApplication(application: CreatorApplication) {
     kinds: application.kinds,
     languages: application.languages,
     country: application.country,
+    creator_terms_version: application.creatorTermsVersion,
     status: application.status,
     review_note: application.reviewNote,
     reviewed_by: application.reviewedBy && {

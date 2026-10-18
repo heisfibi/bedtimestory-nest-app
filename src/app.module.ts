@@ -8,6 +8,7 @@ import { appConfig, type AppConfig } from './app.config.js';
 import { BackgroundsModule } from './backgrounds/backgrounds.module.js';
 import { BooksModule } from './books/books.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
+import { LegalModule } from './legal/legal.module.js';
 import { MusicModule } from './music/music.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PagesController } from './pages/pages.controller.js';
@@ -46,6 +47,7 @@ import { UnlockCodesModule } from './unlock-codes/unlock-codes.module.js';
     AppIntegrityModule,
     AppReleaseModule,
     UnlockCodesModule,
+    LegalModule,
   ],
   controllers: [PagesController, ReviewerController],
 })

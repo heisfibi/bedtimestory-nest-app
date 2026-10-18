@@ -1,25 +1,11 @@
-import { join } from 'node:path';
-import { Controller, Get, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get } from '@nestjs/common';
 
-// The app links to `${baseUrl}/terms` and `${baseUrl}/privacy` from the
-// subscriptions screen.
-const VIEWS_DIR = join(process.cwd(), 'views');
-
+// The privacy policy and terms the app links to (`${baseUrl}/privacy`,
+// `${baseUrl}/terms`) are served by the legal module.
 @Controller()
 export class PagesController {
   @Get()
   status() {
     return { name: 'storytime-api', status: 'ok' };
-  }
-
-  @Get('terms')
-  terms(@Res() response: Response) {
-    response.sendFile(join(VIEWS_DIR, 'terms.html'));
-  }
-
-  @Get('privacy')
-  privacy(@Res() response: Response) {
-    response.sendFile(join(VIEWS_DIR, 'privacy.html'));
   }
 }

@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   ArrayUnique,
@@ -6,10 +6,12 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 import { ADMIN_ROLES, type AdminRole } from '../admin.entity.js';
@@ -139,6 +141,13 @@ export class ApplyDto extends NewPasswordDto {
   @IsString()
   @MaxLength(80)
   country?: string | null;
+
+  // The version of the Creator Terms the form linked to, which ticking its
+  // box agreed to (0 is the built-in text, before any was published).
+  @Type(() => Number)
+  @IsInt({ message: 'Please agree to the Creator Terms' })
+  @Min(0, { message: 'Please agree to the Creator Terms' })
+  creator_terms_version: number;
 
   // Left empty by people; bots fill in every field.
   @IsOptional()

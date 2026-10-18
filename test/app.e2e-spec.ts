@@ -807,6 +807,7 @@ describe('StoryTime API (e2e)', () => {
       kinds: ['poem', 'story'],
       languages: 'English, Yoruba',
       country: 'Nigeria',
+      creator_terms_version: 0,
     };
     const apply = (body: object) =>
       http().post('/api/creator-applications').send(body);
@@ -814,6 +815,9 @@ describe('StoryTime API (e2e)', () => {
     await apply({ ...application, kinds: [] }).expect(400);
     await apply({ ...application, kinds: ['novel'] }).expect(400);
     await apply({ ...application, password: 'short' }).expect(400);
+    // The box for the Creator Terms has to be ticked.
+    const { creator_terms_version: _, ...unticked } = application;
+    await apply(unticked).expect(400);
     // Someone with an account signs in instead.
     await apply({ ...application, email: 'bola@example.com' }).expect(409);
 
@@ -854,6 +858,7 @@ describe('StoryTime API (e2e)', () => {
         kinds: ['poem', 'story'],
         languages: 'English, Yoruba',
         country: 'Nigeria',
+        creator_terms_version: 0,
         status: 'pending',
       }),
     ]);
@@ -1517,9 +1522,111 @@ describe('StoryTime API (e2e)', () => {
       .expect(404);
   });
 
-  it('serves the terms and privacy pages', async () => {
-    await http().get('/terms').expect(200).expect('Content-Type', /html/);
-    await http().get('/privacy').expect(200).expect('Content-Type', /html/);
+  it('serves the legal pages, and lets super admins publish new versions', async () => {
+    for (const path of ['/terms', '/privacy', '/creator-terms']) {
+      await http().get(path).expect(200).expect('Content-Type', /html/);
+    }
+    const privacy = await http().get('/privacy').expect(200);
+    expect(privacy.text).toContain('Effective date: 18 October 2026');
+    expect(privacy.text).toContain('id="creators"');
+    await http().get('/api/legal/cookies').expect(404);
+
+    const { body: page } = await http()
+      .get('/api/legal/creator-terms')
+      .expect(200);
+    expect(page).toMatchObject({
+      document: 'creator-terms',
+      title: 'Creator Terms',
+      version: 0,
+      effective_date: '2026-10-18',
+    });
+    expect(page.sections[0]).toMatchObject({ id: 'about-these-terms' });
+
+    // Only super admins edit them.
+    await http().get('/api/admin/legal').expect(401);
+    await http().get('/api/admin/legal').set(bearer(adminToken)).expect(403);
+    const { body: list } = await http()
+      .get('/api/admin/legal')
+      .set(bearer(superToken))
+      .expect(200);
+    expect(list.map((d: { document: string }) => d.document)).toEqual([
+      'privacy',
+      'terms',
+      'creator-terms',
+    ]);
+
+    const preview = (body: string) =>
+      http()
+        .post('/api/admin/legal/preview')
+        .set(bearer(superToken))
+        .send({ body });
+    expect((await preview('## Hi\n<b>x</b>').expect(200)).body).toEqual({
+      sections: [
+        { id: 'hi', title: 'Hi', html: '<p>&lt;b&gt;x&lt;/b&gt;</p>' },
+      ],
+    });
+    expect((await preview('No heading').expect(400)).body.message).toMatch(
+      /Start with a section heading/,
+    );
+
+    const save = (body: object) =>
+      http().put('/api/admin/legal/terms').set(bearer(superToken)).send(body);
+    const { body: start } = await http()
+      .get('/api/admin/legal/terms')
+      .set(bearer(superToken))
+      .expect(200);
+    expect(start.current.version).toBe(0);
+    await save({
+      body: start.current.body,
+      effective_date: '2026-10-18',
+    }).expect(400);
+    await save({ body: '## A\nB', effective_date: '2026-02-30' }).expect(400);
+    await save({ body: '## A\nB', effective_date: '18-10-2026' }).expect(400);
+    await http()
+      .put('/api/admin/legal/terms')
+      .set(bearer(adminToken))
+      .send({ body: '## A\nB', effective_date: '2026-11-01' })
+      .expect(403);
+
+    const { body: saved } = await save({
+      body: '## 1. New Terms\nBe kind.',
+      effective_date: '2026-11-01',
+      note: ' Shorter ',
+    }).expect(200);
+    expect(saved.current).toMatchObject({
+      version: 1,
+      effective_date: '2026-11-01',
+      note: 'Shorter',
+      created_by: 'Ada',
+      body: '## 1. New Terms\nBe kind.',
+    });
+    expect(saved.history.map((v: { version: number }) => v.version)).toEqual([
+      1, 0,
+    ]);
+
+    // The app's page and the website's both show it at once.
+    const terms = await http().get('/terms').expect(200);
+    expect(terms.text).toContain('Be kind.');
+    expect(terms.text).toContain('Effective date: 1 November 2026');
+    expect(
+      (await http().get('/api/legal/terms').expect(200)).body,
+    ).toMatchObject({
+      version: 1,
+      sections: [
+        { id: 'new-terms', title: '1. New Terms', html: '<p>Be kind.</p>' },
+      ],
+    });
+
+    // Older versions stay readable.
+    const { body: original } = await http()
+      .get('/api/admin/legal/terms/versions/0')
+      .set(bearer(superToken))
+      .expect(200);
+    expect(original.body).toBe(start.current.body);
+    await http()
+      .get('/api/admin/legal/terms/versions/9')
+      .set(bearer(superToken))
+      .expect(404);
   });
 
   it("lets Play's reviewers in with the reviewer code, however it's typed", async () => {
